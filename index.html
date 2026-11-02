@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Spotify Bridge</title>
+  <!-- Load Ably and Spotify SDKs -->
+  <script src="https://ably.com"></script>
+  <script src="https://scdn.co"></script>
+</head>
+<body>
+  <h1>Spotify to ESP32 Bridge</h1>
+  <div id="track-info">Waiting for playback...</div>
+
+  <script>
+    // 1. Initialize Ably
+    const ably = new Ably.Realtime('YOUR_ABLY_API_KEY');
+    const channel = ably.channels.get('spotify-track');
+
+    // 2. Initialize Spotify Web Playback SDK
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      const token = 'YOUR_SPOTIFY_ACCESS_TOKEN'; // Obtained via Spotify Auth Flow
+      const player = new Spotify.Player({
+        name: 'Web UI Screen',
+        getOAuthToken: cb => { cb(token); },
+        volume: 0.5
+      });
+
+      // Listen for track/state changes (Pushed instantly by Spotify)
+      player.addListener('player_state_changed', state => {
+        if (!state) return;
+
+        const currentTrack = state.track_window.current_track;
+        const payload = {
+          title: currentTrack.name,
+          artist: currentTrack.artists[0].name,
+          position: state.position,
+          duration: state.duration,
+          paused: state.paused
+        };
+
+        document.getElementById('track-info').innerText = `${payload.title} - ${payload.artist}`;
+
+        // 3. Broadcast to Ably WebSocket instantly
+        channel.publish('update', JSON.stringify(payload));
+      });
+
+      player.connect();
+    };
+  </script>
+</body>
+</html>
